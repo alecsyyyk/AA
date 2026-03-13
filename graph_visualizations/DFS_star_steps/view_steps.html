@@ -1,0 +1,151 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>DFS on star Graph</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                max-width: 1000px;
+                margin: 0 auto;
+                padding: 20px;
+                text-align: center;
+            }
+            .controls {
+                margin: 20px 0;
+                display: flex;
+                justify-content: center;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+            button {
+                padding: 10px 15px;
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            button:hover {
+                background-color: #45a049;
+            }
+            #resetButton {
+                background-color: #f44336;
+            }
+            #resetButton:hover {
+                background-color: #d32f2f;
+            }
+            .step-info {
+                margin: 10px 0;
+                font-size: 18px;
+            }
+            .time-info {
+                margin: 5px 0;
+                font-size: 16px;
+                color: #666;
+            }
+            .meta-info {
+                margin-top: 20px;
+                font-size: 12px;
+                color: #999;
+            }
+            img {
+                max-width: 100%;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>DFS on Star Graph</h1>
+        
+        <div class="controls">
+            <button onclick="prevStep()">Previous Step</button>
+            <button onclick="nextStep()">Next Step</button>
+            <button onclick="playAnimation()">Play Animation</button>
+            <button onclick="stopAnimation()">Stop</button>
+            <button id="resetButton" onclick="resetViewer()">Reset</button>
+        </div>
+        
+        <div class="step-info">
+            Step <span id="currentStep">1</span> of 50
+        </div>
+        
+        <div class="time-info">
+            Step Time: <span id="stepTime">loading...</span> ms
+        </div>
+        
+        <div>
+            <img id="stepImage" src="step_001.png" alt="Algorithm Step">
+        </div>
+        
+        
+        <script>
+            let currentStep = 1;
+            const totalSteps = 50;
+            let animationInterval = null;
+            let stepTimes = [];
+            
+            // Fetch step times from JSON file
+            fetch('step_times.json')
+                .then(response => response.json())
+                .then(data => {
+                    stepTimes = data;
+                    document.getElementById('stepTime').textContent = stepTimes[0].toFixed(4);
+                })
+                .catch(error => {
+                    console.error('Error loading step times:', error);
+                    document.getElementById('stepTime').textContent = 'N/A';
+                });
+            
+            function updateImage() {
+                const stepStr = currentStep.toString().padStart(3, '0');
+                document.getElementById('stepImage').src = `step_${stepStr}.png`;
+                document.getElementById('currentStep').textContent = currentStep;
+                
+                // Update step time with 4 decimal places
+                if (stepTimes.length > 0) {
+                    document.getElementById('stepTime').textContent = stepTimes[currentStep - 1].toFixed(4);
+                }
+            }
+            
+            function nextStep() {
+                if (currentStep < totalSteps) {
+                    currentStep++;
+                    updateImage();
+                }
+            }
+            
+            function prevStep() {
+                if (currentStep > 1) {
+                    currentStep--;
+                    updateImage();
+                }
+            }
+            
+            function playAnimation() {
+                if (animationInterval) clearInterval(animationInterval);
+                animationInterval = setInterval(() => {
+                    nextStep();
+                    if (currentStep === totalSteps) {
+                        stopAnimation();
+                    }
+                }, 1000); // 1 second between steps
+            }
+            
+            function stopAnimation() {
+                if (animationInterval) {
+                    clearInterval(animationInterval);
+                    animationInterval = null;
+                }
+            }
+            
+            function resetViewer() {
+                stopAnimation();
+                currentStep = 1;
+                updateImage();
+            }
+        </script>
+    </body>
+    </html>
+    
