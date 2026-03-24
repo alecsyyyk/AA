@@ -4,13 +4,32 @@ import time
 import numpy as np
 from collections import deque
 import os
-from matplotlib.lines import Line2D
 import matplotlib
-import json
+import webbrowser
+from pathlib import Path
+from matplotlib.animation import FuncAnimation, PillowWriter
+import subprocess
+import shutil
 
 matplotlib.use("Agg")
 
 os.makedirs("graph_visualizations", exist_ok=True)
+
+
+def open_in_browser(file_path):
+    file_uri = Path(file_path).resolve().as_uri()
+    preferred_browsers = ["msedge", "chrome", "firefox"]
+
+    for browser in preferred_browsers:
+        browser_exe = shutil.which(browser)
+        if browser_exe:
+            try:
+                subprocess.Popen([browser_exe, file_uri])
+                return
+            except Exception:
+                pass
+
+    webbrowser.open_new_tab(file_uri)
 
 
 def dfs(graph, start, visited=None, path=None, steps=None, step_times=None):
@@ -23,7 +42,7 @@ def dfs(graph, start, visited=None, path=None, steps=None, step_times=None):
     if step_times is None:
         step_times = []
 
-    start_time = time.time() 
+    start_time = time.perf_counter()
     
     visited.add(start)
     path.append(start)
@@ -37,7 +56,7 @@ def dfs(graph, start, visited=None, path=None, steps=None, step_times=None):
         }
     )
     
-    step_times.append(time.time() - start_time)
+    step_times.append((time.perf_counter() - start_time) * 1000)
 
     for neighbor in graph[start]:
         if neighbor not in visited:
@@ -53,7 +72,7 @@ def bfs(graph, start):
     steps = []
     step_times = []
     
-    start_time = time.time() 
+    start_time = time.perf_counter()
     
     steps.append(
         {
@@ -65,10 +84,10 @@ def bfs(graph, start):
         }
     )
     
-    step_times.append(time.time() - start_time)
+    step_times.append((time.perf_counter() - start_time) * 1000)
 
     while queue:
-        start_time = time.time()  
+        start_time = time.perf_counter()
         current = queue.popleft()
 
         frontier = []
@@ -90,18 +109,18 @@ def bfs(graph, start):
                 }
             )
             
-            step_times.append(time.time() - start_time)
+            step_times.append((time.perf_counter() - start_time) * 1000)
 
     return path, steps, step_times
 
 
 def measure_performance(graph, start_node, algorithm):
-    start_time = time.time()
+    start_time = time.perf_counter()
     if algorithm == "DFS":
         path, _, _ = dfs(graph, start_node)
     else: 
         path, _, _ = bfs(graph, start_node)
-    end_time = time.time()
+    end_time = time.perf_counter()
 
     execution_time = (end_time - start_time) * 1000
     memory_usage = len(
@@ -119,78 +138,56 @@ def measure_performance(graph, start_node, algorithm):
 def save_algorithm_steps(G, steps, step_times, algorithm, graph_type, directed=False):
     run_dir = f"graph_visualizations/{algorithm}_{graph_type}_steps"
     os.makedirs(run_dir, exist_ok=True)
-    
+
     if graph_type in ["grid"]:
         pos = {node: node for node in G.nodes()}
     else:
         pos = nx.spring_layout(G, seed=42)
-    
-    legend_elements = [
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="w",
-            markerfacecolor="red",
-            markersize=15,
-            label="Current Node",
-        ),
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="w",
-            markerfacecolor="orange",
-            markersize=15,
-            label="Frontier Nodes",
-        ),
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="w",
-            markerfacecolor="green",
-            markersize=15,
-            label="Visited Nodes",
-        ),
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="w",
-            markerfacecolor="lightgray",
-            markersize=15,
-            label="Unvisited Nodes",
-        ),
-    ]
-    
-    for step_idx, step in enumerate(steps):
-        fig, ax = plt.subplots(figsize=(10, 8))
-        
+
+    create_algorithm_gif(
+        G,
+        pos,
+        steps,
+        step_times,
+        algorithm,
+        graph_type,
+        run_dir,
+        directed=directed,
+    )
+    print(f"Created GIF animation in {run_dir}/")
+
+
+def create_algorithm_gif(G, pos, steps, step_times, algorithm, graph_type, run_dir, directed=False):
+    gif_file = f"{run_dir}/{algorithm.lower()}_{graph_type}_animation.gif"
+    all_nodes = list(G.nodes())
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    def draw_frame(step_idx):
+        ax.clear()
+
+        step = steps[step_idx]
         visited = step["visited"]
         current = step["current"]
         frontier = step.get("frontier", [])
-        
-        nx.draw_networkx_edges(G, pos, ax=ax, arrows=directed, alpha=0.3)
-        
-        all_nodes = list(G.nodes())
+
         node_colors = []
         node_sizes = []
-        
         for node in all_nodes:
             if node == current:
-                node_colors.append("red")  
+                node_colors.append("red")
                 node_sizes.append(700)
             elif node in frontier:
-                node_colors.append("orange") 
+                node_colors.append("orange")
                 node_sizes.append(500)
             elif node in visited:
-                node_colors.append("green") 
+                node_colors.append("green")
                 node_sizes.append(500)
             else:
-                node_colors.append("lightgray") 
+                node_colors.append("lightgray")
                 node_sizes.append(500)
-        
+
+        nx.draw_networkx_edges(G, pos, ax=ax, arrows=directed, alpha=0.3)
         nx.draw_networkx_nodes(
             G,
             pos,
@@ -200,189 +197,26 @@ def save_algorithm_steps(G, steps, step_times, algorithm, graph_type, directed=F
             node_size=node_sizes,
         )
         nx.draw_networkx_labels(G, pos, ax=ax)
-        
+
         queue_str = f"Queue: {step.get('queue', [])}" if algorithm == "BFS" else ""
-        step_time = step_times[step_idx] * 1000  
-        
-        ax.legend(handles=legend_elements, loc="upper right")
+        step_time = step_times[step_idx]
         ax.set_title(
-            f"{algorithm} on {graph_type.title()} Graph - Step {step_idx+1}/{len(steps)}\n"
-            f"{queue_str}\nStep Time: {step_time:.4f} ms"  
+            f"{algorithm} on {graph_type.title()} Graph - Step {step_idx + 1}/{len(steps)}\n"
+            f"{queue_str}\nStep Time: {step_time:.6f} ms"
         )
         ax.axis("off")
-        
-        plt.savefig(f"{run_dir}/step_{step_idx+1:03d}.png", dpi=300)
-        plt.close(fig)
-    
-    print(f"Saved {len(steps)} steps as images in {run_dir}/")
-    
-    with open(f"{run_dir}/step_times.json", 'w') as f:
-        json.dump([round(t * 1000, 4) for t in step_times], f) 
-    
-    create_html_viewer(run_dir, algorithm, graph_type, len(steps))
 
+    animation = FuncAnimation(fig, draw_frame, frames=len(steps), interval=700, repeat=True)
+    animation.save(gif_file, writer=PillowWriter(fps=2))
+    plt.close(fig)
 
-def create_html_viewer(image_dir, algorithm, graph_type, num_steps):
-    html_file = f"{image_dir}/view_steps.html"
-    
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>{algorithm} on {graph_type} Graph</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                max-width: 1000px;
-                margin: 0 auto;
-                padding: 20px;
-                text-align: center;
-            }}
-            .controls {{
-                margin: 20px 0;
-                display: flex;
-                justify-content: center;
-                gap: 10px;
-                flex-wrap: wrap;
-            }}
-            button {{
-                padding: 10px 15px;
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-            }}
-            button:hover {{
-                background-color: #45a049;
-            }}
-            #resetButton {{
-                background-color: #f44336;
-            }}
-            #resetButton:hover {{
-                background-color: #d32f2f;
-            }}
-            .step-info {{
-                margin: 10px 0;
-                font-size: 18px;
-            }}
-            .time-info {{
-                margin: 5px 0;
-                font-size: 16px;
-                color: #666;
-            }}
-            .meta-info {{
-                margin-top: 20px;
-                font-size: 12px;
-                color: #999;
-            }}
-            img {{
-                max-width: 100%;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            }}
-        </style>
-    </head>
-    <body>
-        <h1>{algorithm} on {graph_type.title()} Graph</h1>
-        
-        <div class="controls">
-            <button onclick="prevStep()">Previous Step</button>
-            <button onclick="nextStep()">Next Step</button>
-            <button onclick="playAnimation()">Play Animation</button>
-            <button onclick="stopAnimation()">Stop</button>
-            <button id="resetButton" onclick="resetViewer()">Reset</button>
-        </div>
-        
-        <div class="step-info">
-            Step <span id="currentStep">1</span> of {num_steps}
-        </div>
-        
-        <div class="time-info">
-            Step Time: <span id="stepTime">loading...</span> ms
-        </div>
-        
-        <div>
-            <img id="stepImage" src="step_001.png" alt="Algorithm Step">
-        </div>
-        
-        
-        <script>
-            let currentStep = 1;
-            const totalSteps = {num_steps};
-            let animationInterval = null;
-            let stepTimes = [];
-            
-            // Fetch step times from JSON file
-            fetch('step_times.json')
-                .then(response => response.json())
-                .then(data => {{
-                    stepTimes = data;
-                    document.getElementById('stepTime').textContent = stepTimes[0].toFixed(4);
-                }})
-                .catch(error => {{
-                    console.error('Error loading step times:', error);
-                    document.getElementById('stepTime').textContent = 'N/A';
-                }});
-            
-            function updateImage() {{
-                const stepStr = currentStep.toString().padStart(3, '0');
-                document.getElementById('stepImage').src = `step_${{stepStr}}.png`;
-                document.getElementById('currentStep').textContent = currentStep;
-                
-                // Update step time with 4 decimal places
-                if (stepTimes.length > 0) {{
-                    document.getElementById('stepTime').textContent = stepTimes[currentStep - 1].toFixed(4);
-                }}
-            }}
-            
-            function nextStep() {{
-                if (currentStep < totalSteps) {{
-                    currentStep++;
-                    updateImage();
-                }}
-            }}
-            
-            function prevStep() {{
-                if (currentStep > 1) {{
-                    currentStep--;
-                    updateImage();
-                }}
-            }}
-            
-            function playAnimation() {{
-                if (animationInterval) clearInterval(animationInterval);
-                animationInterval = setInterval(() => {{
-                    nextStep();
-                    if (currentStep === totalSteps) {{
-                        stopAnimation();
-                    }}
-                }}, 1000); // 1 second between steps
-            }}
-            
-            function stopAnimation() {{
-                if (animationInterval) {{
-                    clearInterval(animationInterval);
-                    animationInterval = null;
-                }}
-            }}
-            
-            function resetViewer() {{
-                stopAnimation();
-                currentStep = 1;
-                updateImage();
-            }}
-        </script>
-    </body>
-    </html>
-    """
-    
-    with open(html_file, 'w') as f:
-        f.write(html_content)
-    
-    print(f"Created HTML viewer at {html_file}")
-    print(f"Open this file in a web browser to view the algorithm steps interactively")
+    # Open GIF animation automatically with the default system viewer.
+    try:
+        open_in_browser(gif_file)
+    except Exception as exc:
+        print(f"Could not auto-open GIF for {gif_file}: {exc}")
+
+    print(f"Created GIF animation at {gif_file}")
 
 
 # Function to compare algorithms for various node sizes
@@ -632,14 +466,14 @@ def create_summary_visualization(results):
 def main():
     print("Graph Algorithm Visualization")
     print("This program will create sequential visualizations of DFS and BFS algorithms")
-    print("Instead of GIFs, it will generate HTML viewers with step-by-step images")
+    print("This version generates GIF animations only")
     
     results = generate_and_analyze_graphs()
     create_summary_visualization(results)
     
     print("Analysis complete! Visualizations saved in the 'graph_visualizations' directory.")
-    print("Open the HTML files in each algorithm's subdirectory to view the step-by-step execution")
-    print("Each step now includes timing information (with 4 decimal places) and you can use the reset button to start over")
+    print("GIF animations are generated for DFS and BFS in each algorithm subdirectory")
+    print("Each frame includes timing information with higher precision")
 
 
 if __name__ == "__main__":
